@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework import routers
 from django.contrib import admin
+from .views import LoginView
 
 from users.views import UserViewSet, PassengerViewSet, RiderViewSet, RegisterView, LoginView, UserProfileView
 from rest_framework_simplejwt.views import TokenRefreshView

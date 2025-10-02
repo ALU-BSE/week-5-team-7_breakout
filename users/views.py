@@ -5,6 +5,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response  # type: ignore
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from .models import User
+from .serializers import UserSerializer
+
 try:
     from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
 except Exception:
@@ -59,7 +64,7 @@ class PassengerViewSet(viewsets.ModelViewSet):
     """
     queryset = Passenger.objects.all()
     serializer_class = PassengerSerializer
-    # permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         """
@@ -181,5 +186,24 @@ class RiderViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(rider)
         return Response(serializer.data)
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """Custom token serializer to include user data"""
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        data['user'] = UserSerializer(self.user).data
+        return data
+
+
+class LoginView(TokenObtainPairView):
+    """API endpoint for user login"""
+    serializer_class = CustomTokenObtainPairSerializer
+
+    @extend_schema(
+        summary="User login",
+        description="Authenticate user and receive JWT tokens"
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
 
 
