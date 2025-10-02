@@ -1,21 +1,60 @@
 from django.shortcuts import render
 from django.core.cache import cache
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
-from rest_framework.response import Response
+from rest_framework.response import Response  # type: ignore
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from .models import User
+from .serializers import UserSerializer
 
+try:
+    from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
+except Exception:
+    # Fallback no-op implementations so absence of drf_spectacular doesn't break imports
+    def extend_schema(*args, **kwargs):
+        def _decorator(func):
+            return func
+        return _decorator
+
+    class OpenApiParameter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class OpenApiResponse:
+        def __init__(self, *args, **kwargs):
+            pass
 from users.models import User, Passenger, Rider
-from users.serializers import UserSerializer, PassengerSerializer, RiderSerializer
+from users.serializers import UserSerializer, PassengerSerializer, RiderSerializer, UserRegistrationSerializer
 
 
 class UserViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for managing User instances.
-    Provides CRUD operations for users.
+    API endpoint that allows users to be viewed or edited.
     """
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    # permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [AllowAny]
+
+    def create(self, request, *args, **kwargs):
+
+        serializer = UserRegistrationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+
+        refresh = RefreshToken.for_user(user)
+        data = {
+              'user': UserSerializer(user). data,
+              'tokens': {
+                  'refresh': str(refresh),
+                  'access': str(refresh.access_token),
+              },
+              'message': 'User registered successfully'
+        }
+        return Response (data, status=status.HTTP_201_CREATED)
 
 
 class PassengerViewSet(viewsets.ModelViewSet):
@@ -25,7 +64,7 @@ class PassengerViewSet(viewsets.ModelViewSet):
     """
     queryset = Passenger.objects.all()
     serializer_class = PassengerSerializer
-    # permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         """
@@ -147,5 +186,24 @@ class RiderViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(rider)
         return Response(serializer.data)
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """Custom token serializer to include user data"""
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        data['user'] = UserSerializer(self.user).data
+        return data
+
+
+class LoginView(TokenObtainPairView):
+    """API endpoint for user login"""
+    serializer_class = CustomTokenObtainPairSerializer
+
+    @extend_schema(
+        summary="User login",
+        description="Authenticate user and receive JWT tokens"
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
 
 
